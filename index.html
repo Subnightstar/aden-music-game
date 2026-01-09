@@ -3,110 +3,112 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>王愛蹲音樂小遊戲 - 性能飆升版</title>
+    <title>王愛蹲音樂小遊戲 - 極致流暢版</title>
     <style>
         * {
-            touch-action: none;
+            touch-action: none; 
             -webkit-tap-highlight-color: transparent;
             user-select: none;
             -webkit-user-select: none;
-            box-sizing: border-box;
         }
         
         body, html { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
-            background: #000; overflow: hidden; position: fixed;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #000; overflow: hidden; display: flex; 
+            justify-content: center; align-items: center; 
+            font-family: 'Arial Black', "Microsoft JhengHei", sans-serif; 
+            color: #fff; 
+            overscroll-behavior: none; 
+            position: fixed; 
         }
 
-        #game-wrapper { 
-            position: relative; width: 100vw; height: 100vh; 
-            max-width: 500px; margin: 0 auto; 
-            background: #000; overflow: hidden;
-            /* 強制硬體加速 */
-            transform: translateZ(0); 
-        }
+        #game-wrapper { position: relative; width: 100vw; height: 100vh; max-width: 500px; background: #000; overflow: hidden; }
         
         canvas { 
             width: 100%; height: 100%; display: block; 
-            image-rendering: optimizeSpeed; /* 針對效能優化渲染 */
+            image-rendering: -webkit-optimize-contrast;
+            transition: filter 0.2s;
         }
 
-        .screen { 
-            position: absolute; inset: 0; 
-            display: flex; flex-direction: column; justify-content: center; align-items: center; 
-            z-index: 100; text-align: center; 
-            background: rgba(0,0,0,0.9); padding: 20px;
-            backdrop-filter: blur(5px); /* 增加點高級感 */
-        }
-
-        #score-display { 
-            position: absolute; top: 15%; width: 100%; 
-            text-align: center; font-size: 80px; font-weight: 900;
-            color: rgba(255, 255, 255, 0.15); pointer-events: none; z-index: 1; 
-        }
-
-        #timer-display { 
-            position: absolute; top: 10px; right: 15px; 
-            font-size: 20px; color: #00f2ff; font-family: monospace;
-            z-index: 5; text-shadow: 0 0 5px #000;
-        }
+        .screen { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; text-align: center; background: rgba(0,0,0,0.95); padding: 15px; box-sizing: border-box; transition: opacity 0.4s; }
+        #score-display { position: absolute; top: 30px; width: 100%; text-align: center; font-size: 60px; color: rgba(255, 255, 255, 0.2); pointer-events: none; z-index: 5; }
+        #timer-display { position: absolute; top: 100px; width: 100%; text-align: center; font-size: 24px; color: #00f2ff; pointer-events: none; z-index: 5; }
+        #user-tag { position: absolute; top: 10px; left: 15px; font-size: 14px; color: #00f2ff; z-index: 10; opacity: 0.7; }
         
-        /* 輸入控制項優化 */
-        .settings-container { 
-            background: rgba(255,255,255,0.05); padding: 15px; border-radius: 20px; 
-            width: 100%; border: 1px solid rgba(0, 242, 255, 0.2); 
-        }
-        input, select { 
-            background: #111; border: 1px solid #00f2ff; color: #fff; 
-            border-radius: 10px; padding: 12px; font-size: 16px; /* 防止 iOS 自動放大 */
-        }
-        .btn { 
-            padding: 15px 40px; background: #00f2ff; border: none; 
-            color: #000; cursor: pointer; font-size: 20px; font-weight: bold; 
-            margin-top: 15px; border-radius: 50px;
-            box-shadow: 0 4px 15px rgba(0, 242, 255, 0.3);
+        .settings-container { background: rgba(255,255,255,0.08); padding: 12px; border-radius: 15px; width: 95%; margin: 5px 0; border: 1px solid rgba(0, 242, 255, 0.3); touch-action: auto; }
+        input, select, button { pointer-events: auto !important; touch-action: auto !important; transition: all 0.2s; }
+        
+        input, select { background: #222; border: 1px solid #00f2ff; color: #fff; border-radius: 8px; padding: 8px; font-size: 14px; width: 85%; }
+        .key-input { width: 35px !important; text-align: center; font-weight: bold; margin: 2px; }
+        .setting-label { font-size: 11px; color: #00f2ff; margin-bottom: 2px; display: block; font-weight: bold; text-align: left; padding-left: 10px; }
+        
+        .btn { padding: 12px 40px; background: #00f2ff; border: none; color: #000; cursor: pointer; font-size: 18px; font-weight: bold; margin-top: 10px; border-radius: 50px; }
+        .btn:active { transform: scale(0.95); opacity: 0.8; }
+        
+        #countdown-overlay { font-size: 120px; color: #00f2ff; font-weight: bold; display: none; z-index: 200; background: rgba(0,0,0,0.8); }
+        
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-5px); }
+            100% { transform: translateX(0); }
         }
     </style>
 </head>
 <body>
 
 <div id="game-wrapper">
+    <div id="user-tag"></div>
     <div id="score-display">0</div>
-    <div id="timer-display">00</div>
+    <div id="timer-display">TIME: 0</div>
     <canvas id="gameCanvas"></canvas>
 
+    <div id="countdown-overlay" class="screen"></div>
+
     <div id="login-screen" class="screen">
-        <h1 style="color:#00f2ff; letter-spacing: 2px;">王愛蹲</h1>
+        <h2 style="color:#00f2ff; margin-bottom: 10px;">王愛蹲音樂小遊戲</h2>
         <div class="settings-container">
-            <div style="display:flex; gap:10px; margin-bottom:15px;">
-                <input type="text" id="user-name-input" placeholder="玩家名" style="flex:1">
-                <input type="password" id="user-pass-input" placeholder="密碼" style="flex:1">
+            <div style="display:flex; gap:5px; justify-content:center; margin-bottom:8px;">
+                <input type="text" id="user-name-input" placeholder="名稱">
+                <input type="password" id="user-pass-input" placeholder="密碼">
             </div>
-            <div style="display:flex; justify-content: space-between; align-items: center;">
+            <div style="margin-bottom:8px;">
+                <span class="setting-label">按鍵設定 (點擊後按鍵)</span>
+                <input type="text" id="k0" class="key-input" value="A" readonly onkeydown="setK(0,event)">
+                <input type="text" id="k1" class="key-input" value="S" readonly onkeydown="setK(1,event)">
+                <input type="text" id="k2" class="key-input" value="K" readonly onkeydown="setK(2,event)">
+                <input type="text" id="k3" class="key-input" value="L" readonly onkeydown="setK(3,event)">
+            </div>
+            <div class="row-group" style="display:flex; justify-content:space-around;">
                 <select id="game-mode" onchange="toggleTimeInput()" style="width:60%">
                     <option value="normal">普通模式</option>
-                    <option value="survival">生存挑戰 (100下)</option>
+                    <option value="survival">生存模式 (100下)</option>
                 </select>
-                <input type="number" id="game-time-input" value="20" style="width:35%">
+                <input type="number" id="game-time-input" value="20" style="width:30%">
             </div>
         </div>
-        <button class="btn" id="start-game-btn" onclick="checkUserAndStart()">開始挑戰</button>
-        <button style="background:none; border:none; color:#aaa; margin-top:20px; text-decoration: underline;" onclick="window.openRank()">查看排行榜</button>
+        <button class="btn" id="start-game-btn" onclick="checkUserAndStart()">登入並開始 (Enter)</button>
+        <button style="background:none; border:1px solid #00f2ff; color:#00f2ff; margin-top:10px; padding:5px 15px; border-radius:8px; cursor:pointer;" onclick="window.openRank()">🏆 排行榜</button>
     </div>
 
     <div id="fail-screen" class="screen" style="display:none">
-        <h1 id="status-title" style="font-size:40px"></h1>
-        <p id="final-desc" style="font-size:24px; color:#00f2ff"></p>
-        <button class="btn" onclick="startGame()">再試一次</button>
-        <button class="btn" style="background:#333; color:#fff; margin-top:10px;" onclick="location.reload()">回選單</button>
+        <h1 id="status-title"></h1>
+        <p id="final-desc"></p>
+        <button class="btn" onclick="startGame()">再玩一次</button>
+        <button class="btn" style="background:#444; color:#fff; margin-top:10px;" onclick="location.reload()">回主畫面</button>
+    </div>
+
+    <div id="rank-overlay" class="screen" style="display:none;">
+        <h2 style="color:#00f2ff;">生存模式排行榜</h2>
+        <div id="rank-list" style="width:80%; max-height:50%; overflow-y:auto; margin:10px 0; border:1px solid #333; border-radius:10px;"></div>
+        <button class="btn" style="background:#444; color:#fff;" onclick="document.getElementById('rank-overlay').style.display='none'">關閉</button>
     </div>
 </div>
 
-<audio id="bg-music" src="background.mp3" loop preload="auto"></audio>
+<audio id="bg-music" src="background.mp3" loop></audio>
 
 <script type="module">
-    // Firebase 配置保持不變...
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
     import { getFirestore, collection, addDoc, updateDoc, doc, query, where, orderBy, limit, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
 
@@ -146,145 +148,193 @@
             }
         } catch (e) {}
     };
+
+    window.openRank = async () => {
+        const rankListDiv = document.getElementById('rank-list');
+        rankListDiv.innerHTML = "載入中...";
+        document.getElementById('rank-overlay').style.display = 'flex';
+        try {
+            const q = query(collection(db, "leaderboard"), orderBy("score", "desc"), limit(10));
+            const snap = await getDocs(q);
+            let html = ""; let i = 1;
+            snap.forEach(d => {
+                html += `<div style="display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid #333"><span>${i++}. ${d.data().name}</span><span>${d.data().score} 下</span></div>`;
+            });
+            rankListDiv.innerHTML = html || "暫無紀錄";
+        } catch (e) { rankListDiv.innerHTML = "讀取失敗"; }
+    };
 </script>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d', { alpha: false }); // 關閉 alpha 通道提升效能
+    const ctx = canvas.getContext('2d', { alpha: false });
     const bgMusic = document.getElementById('bg-music');
     
     let audioCtx = null, hitBuffer = null;
     let score = 0, isPlaying = false, timeLeft = 0, gameTimer = null;
     let currentName = "", currentPass = "", currentVol = 0.3;
-    let zombieQueue = [], visualScore = 0, spawnedCount = 0;
+    let customKeys = ['a', 's', 'k', 'l'], zombieQueue = [], visualScore = 0, spawnedCount = 0;
     
     const zombieImg = new Image(); 
     zombieImg.src = 'zombie.png';
     let imageLoaded = false; 
     zombieImg.onload = () => imageLoaded = true;
 
-    // 螢幕尺寸快取，減少重複計算
-    let W, H, laneW, rowH, finishLineY;
-
-    function resize() {
-        const dpr = Math.min(window.devicePixelRatio, 2); // 限制 DPR 最高為 2，防止高解析手機卡頓
-        const rect = canvas.getBoundingClientRect();
-        canvas.width = rect.width * dpr;
-        canvas.height = rect.height * dpr;
-        ctx.scale(dpr, dpr);
-        
-        W = rect.width;
-        H = rect.height;
-        laneW = W / 4;
-        rowH = H * 0.13;
-        finishLineY = H * 0.75;
-    }
-    window.addEventListener('resize', resize);
-    resize();
-
     async function initAudio() {
         if (audioCtx) return;
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         try {
-            const resp = await fetch('music.mp3');
-            hitBuffer = await audioCtx.decodeAudioData(await resp.arrayBuffer());
-        } catch (e) {}
+            const response = await fetch('music.mp3');
+            const arrayBuffer = await response.arrayBuffer();
+            hitBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        } catch (e) { console.warn("音效載入失敗"); }
     }
 
     function playHitSound() {
         if (!audioCtx || !hitBuffer) return;
         const source = audioCtx.createBufferSource();
         source.buffer = hitBuffer;
-        const gain = audioCtx.createGain();
-        gain.gain.value = currentVol;
-        source.connect(gain).connect(audioCtx.destination);
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = currentVol;
+        source.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
         source.start(0);
     }
 
     async function checkUserAndStart() {
-        const name = document.getElementById('user-name-input').value.trim();
-        const pass = document.getElementById('user-pass-input').value.trim();
-        if (!name || !pass) return alert("請輸入資訊");
+        const nameInput = document.getElementById('user-name-input');
+        const passInput = document.getElementById('user-pass-input');
+        const name = nameInput.value.trim();
+        const pass = passInput.value.trim();
         
-        const btn = document.getElementById('start-game-btn');
-        btn.innerText = "驗證中..."; btn.disabled = true;
-
-        await initAudio();
-        const result = await window.verifyUserCloud(name, pass);
-        
-        if (result.status === "wrong") {
-            alert("密碼錯誤");
-            btn.innerText = "開始挑戰"; btn.disabled = false;
+        if (!name || !pass) {
+            alert("請填寫完整資訊！");
             return;
         }
 
-        currentName = name; currentPass = pass;
-        document.getElementById('login-screen').style.display = 'none';
-        startGame();
+        const startBtn = document.getElementById('start-game-btn');
+        const originalText = startBtn.innerText;
+        startBtn.innerText = "驗證中..."; 
+        startBtn.disabled = true;
+
+        await initAudio();
+        const result = await window.verifyUserCloud(name, pass);
+
+        if (result.status === "wrong") {
+            passInput.style.border = "2px solid red";
+            passInput.style.animation = "shake 0.3s";
+            setTimeout(() => passInput.style.animation = "", 300);
+            alert("❌ 密碼錯誤！");
+            startBtn.innerText = originalText;
+            startBtn.disabled = false;
+            return;
+        }
+
+        if (result.status === "error") {
+            alert("❌ 網路連線失敗");
+            startBtn.innerText = originalText; startBtn.disabled = false;
+            return;
+        }
+
+        // 登入成功確認
+        startBtn.style.background = "#39FF14"; // 螢光綠
+        startBtn.innerText = "登入成功！";
+        
+        currentName = name;
+        currentPass = pass;
+        document.getElementById('user-tag').innerText = `Player: ${currentName}`;
+
+        setTimeout(() => {
+            document.getElementById('login-screen').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('login-screen').style.display = 'none';
+                startCountdown();
+            }, 400);
+        }, 600);
+    }
+
+    function startCountdown() {
+        const overlay = document.getElementById('countdown-overlay');
+        overlay.style.display = 'flex';
+        let count = 3;
+        overlay.innerText = count;
+
+        const timer = setInterval(() => {
+            count--;
+            if (count > 0) {
+                overlay.innerText = count;
+                overlay.style.transform = "scale(1.5)";
+                setTimeout(() => overlay.style.transform = "scale(1)", 100);
+            } else {
+                clearInterval(timer);
+                overlay.style.display = 'none';
+                startGame();
+            }
+        }, 800);
     }
 
     function startGame() {
+        bgMusic.currentTime = 0;
+        bgMusic.volume = currentVol;
         bgMusic.play().catch(()=>{});
+        
         document.getElementById('fail-screen').style.display = 'none';
         score = 0; visualScore = 0; spawnedCount = 0;
         
         const mode = document.getElementById('game-mode').value;
         timeLeft = (mode === 'survival') ? 999 : parseInt(document.getElementById('game-time-input').value);
+        document.getElementById('score-display').innerText = score;
         
-        zombieQueue = Array.from({length:15}, () => ({ lane: Math.floor(Math.random()*4), id: spawnedCount++ }));
+        zombieQueue = [];
+        for(let i=0; i<15; i++) {
+            zombieQueue.push({ lane: Math.floor(Math.random() * 4), id: spawnedCount++ });
+        }
         
         isPlaying = true;
-        updateTimerDisplay();
-        if(gameTimer) clearInterval(gameTimer);
-        gameTimer = setInterval(() => {
-            timeLeft--;
-            updateTimerDisplay();
-            if(timeLeft <= 0) endGame();
-        }, 1000);
-        
+        runTimer();
         requestAnimationFrame(renderLoop);
     }
 
-    function updateTimerDisplay() {
-        document.getElementById('timer-display').innerText = timeLeft;
-    }
+    // --- 其餘遊戲引擎邏輯 (與您原本一致，保持流暢) ---
 
     function renderLoop() {
         if (!isPlaying) return;
+        visualScore += (score - visualScore) * 0.22;
+        const dpr = window.devicePixelRatio || 1;
+        const logicalW = canvas.width / dpr;
+        const logicalH = canvas.height / dpr;
+        const laneW = logicalW / 4;
+        const rowH = logicalH * 0.12; 
+        const finishLineY = logicalH * 0.78; 
 
-        // 平滑滾動數值計算
-        visualScore += (score - visualScore) * 0.2;
-
-        // 繪製背景
         ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, W, H);
-
-        // 繪製判定線
-        ctx.strokeStyle = "#00f2ff";
-        ctx.lineWidth = 3;
+        ctx.fillRect(0, 0, logicalW, logicalH);
+        
+        // 分隔線
+        ctx.strokeStyle = "rgba(0, 242, 255, 0.4)";
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(0, finishLineY + 20);
-        ctx.lineTo(W, finishLineY + 20);
+        ctx.moveTo(0, finishLineY + rowH * 0.8);
+        ctx.lineTo(logicalW, finishLineY + rowH * 0.8);
         ctx.stroke();
 
-        // 繪製殭屍 (倒序繪製，確保前面的在上面)
-        for (let i = zombieQueue.length - 1; i >= 0; i--) {
+        for (let i = 0; i < zombieQueue.length; i++) {
             const zom = zombieQueue[i];
+            const size = laneW * 0.75;
             const drawY = finishLineY - (zom.id - visualScore) * rowH;
+            if (drawY > logicalH) continue;
             
-            if (drawY > H + 100) continue; // 超出螢幕下方的移除感官
-            
-            const size = laneW * 0.8;
-            const drawX = zom.lane * laneW + (laneW - size) / 2;
+            const dist = finishLineY - drawY;
+            ctx.globalAlpha = Math.min(1.0, Math.max(0, 1.1 - (dist / (logicalH * 0.7))));
 
             if (imageLoaded) {
-                ctx.drawImage(zombieImg, drawX, drawY, size, size);
+                ctx.drawImage(zombieImg, zom.lane * laneW + (laneW - size) / 2, drawY, size, size);
             } else {
                 ctx.fillStyle = "#00f2ff";
-                ctx.fillRect(drawX, drawY, size, size);
+                ctx.fillRect(zom.lane * laneW + (laneW - size) / 2, drawY, size, size);
             }
         }
-
+        ctx.globalAlpha = 1.0;
         requestAnimationFrame(renderLoop);
     }
 
@@ -296,39 +346,67 @@
             playHitSound(); 
             zombieQueue.shift();
             zombieQueue.push({ lane: Math.floor(Math.random() * 4), id: spawnedCount++ });
-            if (score >= 100 && document.getElementById('game-mode').value === 'survival') endGame();
+            if (document.getElementById('game-mode').value === 'survival' && score >= 100) endGame();
         } else { 
             endGame(); 
         }
     }
 
-    // 使用 PointerEvents 解決點擊延遲
-    canvas.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const lane = Math.floor((x / rect.width) * 4);
-        handleInput(lane);
-    }, { passive: false });
-
     async function endGame() {
         if (!isPlaying) return;
-        isPlaying = false;
-        clearInterval(gameTimer);
+        isPlaying = false; 
+        clearInterval(gameTimer); 
         bgMusic.pause();
         
-        document.getElementById('status-title').innerText = "挑戰結束";
-        document.getElementById('final-desc').innerText = `分數: ${score}`;
-        document.getElementById('fail-screen').style.display = 'flex';
-
+        document.getElementById('status-title').innerText = "遊戲結束";
+        document.getElementById('final-desc').innerText = `${currentName} 共跳了 ${score} 下`;
+        
         if (document.getElementById('game-mode').value === 'survival') {
             await window.saveScoreToCloud(currentName, currentPass, score);
         }
+        document.getElementById('fail-screen').style.display = 'flex';
     }
 
-    function toggleTimeInput() { 
-        document.getElementById('game-time-input').disabled = (document.getElementById('game-mode').value === 'survival'); 
+    function toggleTimeInput() { document.getElementById('game-time-input').disabled = (document.getElementById('game-mode').value === 'survival'); }
+    function setK(i, e) { e.preventDefault(); customKeys[i] = e.key.toLowerCase(); document.getElementById(`k${i}`).value = e.key.toUpperCase(); }
+    
+    function runTimer() { 
+        if(gameTimer) clearInterval(gameTimer); 
+        gameTimer = setInterval(() => { 
+            timeLeft--; 
+            document.getElementById('timer-display').innerText = `TIME: ${timeLeft}`; 
+            if(timeLeft <= 0) endGame(); 
+        }, 1000); 
     }
+
+    canvas.addEventListener('touchstart', (e) => { 
+        e.preventDefault(); 
+        const rect = canvas.getBoundingClientRect();
+        for(let i=0; i<e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            const lane = Math.floor(((touch.clientX - rect.left) / rect.width) * 4);
+            handleInput(lane);
+        }
+    });
+
+    window.addEventListener('keydown', e => { 
+        if (!isPlaying && e.key === 'Enter') { 
+            if(document.getElementById('login-screen').style.display !== 'none') checkUserAndStart(); 
+            return; 
+        }
+        const idx = customKeys.indexOf(e.key.toLowerCase());
+        if (idx !== -1) handleInput(idx);
+    });
+
+    function resize() {
+        const dpr = window.devicePixelRatio || 1;
+        const wrapper = document.getElementById('game-wrapper');
+        canvas.width = wrapper.clientWidth * dpr;
+        canvas.height = wrapper.clientHeight * dpr;
+        ctx.scale(dpr, dpr);
+    }
+    window.addEventListener('resize', resize); 
+    resize();
 </script>
 </body>
 </html>
