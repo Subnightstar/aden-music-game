@@ -30,41 +30,27 @@
             transition: filter 0.2s;
         }
 
-        .screen { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; text-align: center; background: rgba(0,0,0,0.95); padding: 15px; box-sizing: border-box; transition: opacity 0.4s; }
+        .screen { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; text-align: center; background: rgba(0,0,0,0.95); padding: 15px; box-sizing: border-box; }
         #score-display { position: absolute; top: 30px; width: 100%; text-align: center; font-size: 60px; color: rgba(255, 255, 255, 0.2); pointer-events: none; z-index: 5; }
         #timer-display { position: absolute; top: 100px; width: 100%; text-align: center; font-size: 24px; color: #00f2ff; pointer-events: none; z-index: 5; }
-        #user-tag { position: absolute; top: 10px; left: 15px; font-size: 14px; color: #00f2ff; z-index: 10; opacity: 0.7; }
         
         .settings-container { background: rgba(255,255,255,0.08); padding: 12px; border-radius: 15px; width: 95%; margin: 5px 0; border: 1px solid rgba(0, 242, 255, 0.3); touch-action: auto; }
-        input, select, button { pointer-events: auto !important; touch-action: auto !important; transition: all 0.2s; }
+        input, select, button { pointer-events: auto !important; touch-action: auto !important; }
         
         input, select { background: #222; border: 1px solid #00f2ff; color: #fff; border-radius: 8px; padding: 8px; font-size: 14px; width: 85%; }
         .key-input { width: 35px !important; text-align: center; font-weight: bold; margin: 2px; }
         .setting-label { font-size: 11px; color: #00f2ff; margin-bottom: 2px; display: block; font-weight: bold; text-align: left; padding-left: 10px; }
         
         .btn { padding: 12px 40px; background: #00f2ff; border: none; color: #000; cursor: pointer; font-size: 18px; font-weight: bold; margin-top: 10px; border-radius: 50px; }
-        .btn:active { transform: scale(0.95); opacity: 0.8; }
-        
-        #countdown-overlay { font-size: 120px; color: #00f2ff; font-weight: bold; display: none; z-index: 200; background: rgba(0,0,0,0.8); }
-        
-        @keyframes shake {
-            0% { transform: translateX(0); }
-            25% { transform: translateX(-5px); }
-            50% { transform: translateX(5px); }
-            75% { transform: translateX(-5px); }
-            100% { transform: translateX(0); }
-        }
+        .row-group { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 95%; margin: 0 auto; }
     </style>
 </head>
 <body>
 
 <div id="game-wrapper">
-    <div id="user-tag"></div>
     <div id="score-display">0</div>
     <div id="timer-display">TIME: 0</div>
     <canvas id="gameCanvas"></canvas>
-
-    <div id="countdown-overlay" class="screen"></div>
 
     <div id="login-screen" class="screen">
         <h2 style="color:#00f2ff; margin-bottom: 10px;">王愛蹲音樂小遊戲</h2>
@@ -74,21 +60,31 @@
                 <input type="password" id="user-pass-input" placeholder="密碼">
             </div>
             <div style="margin-bottom:8px;">
-                <span class="setting-label">按鍵設定 (點擊後按鍵)</span>
+                <span class="setting-label">按鍵設定</span>
                 <input type="text" id="k0" class="key-input" value="A" readonly onkeydown="setK(0,event)">
                 <input type="text" id="k1" class="key-input" value="S" readonly onkeydown="setK(1,event)">
                 <input type="text" id="k2" class="key-input" value="K" readonly onkeydown="setK(2,event)">
                 <input type="text" id="k3" class="key-input" value="L" readonly onkeydown="setK(3,event)">
             </div>
-            <div class="row-group" style="display:flex; justify-content:space-around;">
-                <select id="game-mode" onchange="toggleTimeInput()" style="width:60%">
+            <div class="row-group">
+                <select id="game-mode" onchange="toggleTimeInput()" style="width:65%">
                     <option value="normal">普通模式</option>
                     <option value="survival">生存模式 (100下)</option>
                 </select>
                 <input type="number" id="game-time-input" value="20" style="width:30%">
             </div>
+            <div class="row-group" style="margin-top:10px;">
+                <div style="flex:1">
+                    <span class="setting-label">音量 <span id="vol-val">30%</span></span>
+                    <input type="range" id="volume-slider" min="0" max="100" value="30" oninput="updateVol(this.value)">
+                </div>
+                <div style="flex:1">
+                    <span class="setting-label">亮度 <span id="bright-val">100%</span></span>
+                    <input type="range" id="brightness-slider" min="50" max="200" value="100" oninput="updateBright(this.value)">
+                </div>
+            </div>
         </div>
-        <button class="btn" id="start-game-btn" onclick="checkUserAndStart()">登入並開始 (Enter)</button>
+        <button class="btn" id="start-game-btn" onclick="checkUserAndStart()">開始遊戲 (Enter)</button>
         <button style="background:none; border:1px solid #00f2ff; color:#00f2ff; margin-top:10px; padding:5px 15px; border-radius:8px; cursor:pointer;" onclick="window.openRank()">🏆 排行榜</button>
     </div>
 
@@ -167,18 +163,11 @@
 
 <script>
     const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d', { alpha: false });
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     const bgMusic = document.getElementById('bg-music');
     
-    let audioCtx = null, hitBuffer = null;
-    let score = 0, isPlaying = false, timeLeft = 0, gameTimer = null;
-    let currentName = "", currentPass = "", currentVol = 0.3;
-    let customKeys = ['a', 's', 'k', 'l'], zombieQueue = [], visualScore = 0, spawnedCount = 0;
-    
-    const zombieImg = new Image(); 
-    zombieImg.src = 'zombie.png';
-    let imageLoaded = false; 
-    zombieImg.onload = () => imageLoaded = true;
+    let audioCtx = null;
+    let hitBuffer = null;
 
     async function initAudio() {
         if (audioCtx) return;
@@ -187,7 +176,7 @@
             const response = await fetch('music.mp3');
             const arrayBuffer = await response.arrayBuffer();
             hitBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        } catch (e) { console.warn("音效載入失敗"); }
+        } catch (e) { console.warn("音訊載入失敗"); }
     }
 
     function playHitSound() {
@@ -201,81 +190,75 @@
         source.start(0);
     }
 
-    async function checkUserAndStart() {
-        const nameInput = document.getElementById('user-name-input');
-        const passInput = document.getElementById('user-pass-input');
-        const name = nameInput.value.trim();
-        const pass = passInput.value.trim();
-        
-        if (!name || !pass) {
-            alert("請填寫完整資訊！");
-            return;
-        }
+    let score = 0, isPlaying = false, isPaused = false, timeLeft = 0, gameTimer = null;
+    let currentName = "", currentPass = "", currentVol = 0.3;
+    let customKeys = ['a', 's', 'k', 'l'];
+    let zombieQueue = [];
+    let visualScore = 0; 
+    let spawnedCount = 0; 
+    
+    const zombieImg = new Image(); 
+    zombieImg.src = 'zombie.png';
+    let imageLoaded = false; 
+    zombieImg.onload = () => imageLoaded = true;
 
+    function updateBright(val) {
+        document.getElementById('bright-val').innerText = val + '%';
+        canvas.style.filter = `brightness(${val}%)`;
+    }
+
+    function updateVol(val) {
+        currentVol = val / 100;
+        document.getElementById('vol-val').innerText = val + '%';
+        bgMusic.volume = currentVol;
+    }
+
+    async function checkUserAndStart() {
+        const name = document.getElementById('user-name-input').value.trim();
+        const pass = document.getElementById('user-pass-input').value.trim();
+        if (!name || !pass) return alert("請輸入名稱與密碼！");
+        
         const startBtn = document.getElementById('start-game-btn');
         const originalText = startBtn.innerText;
         startBtn.innerText = "驗證中..."; 
         startBtn.disabled = true;
 
+        // 初始化音訊（必須由使用者點擊觸發）
         await initAudio();
+        
         const result = await window.verifyUserCloud(name, pass);
-
-        if (result.status === "wrong") {
-            passInput.style.border = "2px solid red";
-            passInput.style.animation = "shake 0.3s";
-            setTimeout(() => passInput.style.animation = "", 300);
-            alert("❌ 密碼錯誤！");
-            startBtn.innerText = originalText;
-            startBtn.disabled = false;
-            return;
-        }
-
+        
         if (result.status === "error") {
-            alert("❌ 網路連線失敗");
+            alert("❌ 網路連線異常");
             startBtn.innerText = originalText; startBtn.disabled = false;
             return;
-        }
-
-        // 登入成功確認
-        startBtn.style.background = "#39FF14"; // 螢光綠
-        startBtn.innerText = "登入成功！";
+        } 
         
-        currentName = name;
+        if (result.status === "wrong") {
+            alert("❌ 密碼錯誤！");
+            startBtn.innerText = originalText; startBtn.disabled = false;
+            return;
+        } 
+
+        // 驗證回饋彈窗
+        if (result.status === "ok") {
+            alert(`✅ 驗證成功！\n玩家：${name}\n最高紀錄：${result.best || 0} 下`);
+        } else {
+            alert(`✨ 歡迎新玩家：${name}\n密碼已設定，祝您遊戲愉快！`);
+        }
+        
+        currentName = name; 
         currentPass = pass;
-        document.getElementById('user-tag').innerText = `Player: ${currentName}`;
-
-        setTimeout(() => {
-            document.getElementById('login-screen').style.opacity = '0';
-            setTimeout(() => {
-                document.getElementById('login-screen').style.display = 'none';
-                startCountdown();
-            }, 400);
-        }, 600);
-    }
-
-    function startCountdown() {
-        const overlay = document.getElementById('countdown-overlay');
-        overlay.style.display = 'flex';
-        let count = 3;
-        overlay.innerText = count;
-
-        const timer = setInterval(() => {
-            count--;
-            if (count > 0) {
-                overlay.innerText = count;
-                overlay.style.transform = "scale(1.5)";
-                setTimeout(() => overlay.style.transform = "scale(1)", 100);
-            } else {
-                clearInterval(timer);
-                overlay.style.display = 'none';
-                startGame();
-            }
-        }, 800);
+        document.getElementById('login-screen').style.display = 'none';
+        startBtn.innerText = originalText; 
+        startBtn.disabled = false;
+        
+        startGame();
     }
 
     function startGame() {
-        bgMusic.currentTime = 0;
-        bgMusic.volume = currentVol;
+        bgMusic.currentTime = 0; 
+        bgMusic.volume = currentVol; 
         bgMusic.play().catch(()=>{});
         
         document.getElementById('fail-screen').style.display = 'none';
@@ -295,11 +278,10 @@
         requestAnimationFrame(renderLoop);
     }
 
-    // --- 其餘遊戲引擎邏輯 (與您原本一致，保持流暢) ---
-
     function renderLoop() {
-        if (!isPlaying) return;
+        if (!isPlaying || isPaused) return;
         visualScore += (score - visualScore) * 0.22;
+
         const dpr = window.devicePixelRatio || 1;
         const logicalW = canvas.width / dpr;
         const logicalH = canvas.height / dpr;
@@ -309,8 +291,7 @@
 
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, logicalW, logicalH);
-        
-        // 分隔線
+
         ctx.strokeStyle = "rgba(0, 242, 255, 0.4)";
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -339,7 +320,7 @@
     }
 
     function handleInput(lane) {
-        if (!isPlaying) return;
+        if (!isPlaying || isPaused) return;
         if (lane === zombieQueue[0].lane) {
             score++;
             document.getElementById('score-display').innerText = score;
@@ -352,6 +333,16 @@
         }
     }
 
+    canvas.addEventListener('touchstart', (e) => { 
+        e.preventDefault(); 
+        const rect = canvas.getBoundingClientRect();
+        for(let i=0; i<e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            const lane = Math.floor(((touch.clientX - rect.left) / rect.width) * 4);
+            handleInput(lane);
+        }
+    }, { passive: false });
+
     async function endGame() {
         if (!isPlaying) return;
         isPlaying = false; 
@@ -359,7 +350,7 @@
         bgMusic.pause();
         
         document.getElementById('status-title').innerText = "遊戲結束";
-        document.getElementById('final-desc').innerText = `${currentName} 共跳了 ${score} 下`;
+        document.getElementById('final-desc').innerText = `${currentName} 跳了 ${score} 下`;
         
         if (document.getElementById('game-mode').value === 'survival') {
             await window.saveScoreToCloud(currentName, currentPass, score);
@@ -378,17 +369,7 @@
             if(timeLeft <= 0) endGame(); 
         }, 1000); 
     }
-
-    canvas.addEventListener('touchstart', (e) => { 
-        e.preventDefault(); 
-        const rect = canvas.getBoundingClientRect();
-        for(let i=0; i<e.changedTouches.length; i++) {
-            const touch = e.changedTouches[i];
-            const lane = Math.floor(((touch.clientX - rect.left) / rect.width) * 4);
-            handleInput(lane);
-        }
-    });
-
+    
     window.addEventListener('keydown', e => { 
         if (!isPlaying && e.key === 'Enter') { 
             if(document.getElementById('login-screen').style.display !== 'none') checkUserAndStart(); 
