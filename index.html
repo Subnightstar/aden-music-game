@@ -24,7 +24,6 @@
 
         #game-wrapper { position: relative; width: 100vw; height: 100vh; max-width: 500px; background: #000; overflow: hidden; }
         
-        /* 使用 CSS filter 處理亮度，效能遠高於 canvas 內繪製 */
         canvas { 
             width: 100%; height: 100%; display: block; 
             image-rendering: -webkit-optimize-contrast;
@@ -167,7 +166,6 @@
     const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     const bgMusic = document.getElementById('bg-music');
     
-    // --- Web Audio API 優化 (零延遲) ---
     let audioCtx = null;
     let hitBuffer = null;
 
@@ -192,7 +190,6 @@
         source.start(0);
     }
 
-    // 遊戲狀態
     let score = 0, isPlaying = false, isPaused = false, timeLeft = 0, gameTimer = null;
     let currentName = "", currentPass = "", currentVol = 0.3;
     let customKeys = ['a', 's', 'k', 'l'];
@@ -207,7 +204,6 @@
 
     function updateBright(val) {
         document.getElementById('bright-val').innerText = val + '%';
-        // 使用 CSS 濾鏡，不干擾繪圖循環
         canvas.style.filter = `brightness(${val}%)`;
     }
 
@@ -218,35 +214,46 @@
     }
 
     async function checkUserAndStart() {
-        // 在按下按鈕後初始化音訊，解決預播放與靜音問題
-        await initAudio();
-        
         const name = document.getElementById('user-name-input').value.trim();
         const pass = document.getElementById('user-pass-input').value.trim();
         if (!name || !pass) return alert("請輸入名稱與密碼！");
         
         const startBtn = document.getElementById('start-game-btn');
-        startBtn.innerText = "驗證中..."; startBtn.disabled = true;
+        const originalText = startBtn.innerText;
+        startBtn.innerText = "驗證中..."; 
+        startBtn.disabled = true;
+
+        // 初始化音訊（必須由使用者點擊觸發）
+        await initAudio();
+        
         const result = await window.verifyUserCloud(name, pass);
         
         if (result.status === "error") {
             alert("❌ 網路連線異常");
-            startBtn.innerText = "開始遊戲 (Enter)"; startBtn.disabled = false;
+            startBtn.innerText = originalText; startBtn.disabled = false;
             return;
         } 
         
         if (result.status === "wrong") {
             alert("❌ 密碼錯誤！");
-            startBtn.innerText = "開始遊戲 (Enter)"; startBtn.disabled = false;
+            startBtn.innerText = originalText; startBtn.disabled = false;
             return;
         } 
+
+        // 驗證回饋彈窗
+        if (result.status === "ok") {
+            alert(`✅ 驗證成功！\n玩家：${name}\n最高紀錄：${result.best || 0} 下`);
+        } else {
+            alert(`✨ 歡迎新玩家：${name}\n密碼已設定，祝您遊戲愉快！`);
+        }
         
         currentName = name; 
         currentPass = pass;
         document.getElementById('login-screen').style.display = 'none';
-        startGame();
-        startBtn.innerText = "開始遊戲 (Enter)"; 
+        startBtn.innerText = originalText; 
         startBtn.disabled = false;
+        
+        startGame();
     }
 
     function startGame() {
@@ -255,9 +262,7 @@
         bgMusic.play().catch(()=>{});
         
         document.getElementById('fail-screen').style.display = 'none';
-        score = 0; 
-        visualScore = 0;
-        spawnedCount = 0;
+        score = 0; visualScore = 0; spawnedCount = 0;
         
         const mode = document.getElementById('game-mode').value;
         timeLeft = (mode === 'survival') ? 999 : parseInt(document.getElementById('game-time-input').value);
@@ -275,7 +280,6 @@
 
     function renderLoop() {
         if (!isPlaying || isPaused) return;
-
         visualScore += (score - visualScore) * 0.22;
 
         const dpr = window.devicePixelRatio || 1;
@@ -285,11 +289,9 @@
         const rowH = logicalH * 0.12; 
         const finishLineY = logicalH * 0.78; 
 
-        // 背景清除
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, logicalW, logicalH);
 
-        // 繪製判定線
         ctx.strokeStyle = "rgba(0, 242, 255, 0.4)";
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -297,12 +299,10 @@
         ctx.lineTo(logicalW, finishLineY + rowH * 0.8);
         ctx.stroke();
 
-        // 繪製物件
         for (let i = 0; i < zombieQueue.length; i++) {
             const zom = zombieQueue[i];
             const size = laneW * 0.75;
             const drawY = finishLineY - (zom.id - visualScore) * rowH;
-
             if (drawY > logicalH) continue;
             
             const dist = finishLineY - drawY;
@@ -315,23 +315,18 @@
                 ctx.fillRect(zom.lane * laneW + (laneW - size) / 2, drawY, size, size);
             }
         }
-
         ctx.globalAlpha = 1.0;
         requestAnimationFrame(renderLoop);
     }
 
     function handleInput(lane) {
         if (!isPlaying || isPaused) return;
-        
         if (lane === zombieQueue[0].lane) {
             score++;
             document.getElementById('score-display').innerText = score;
-            
-            playHitSound(); // 改用 Web Audio API 播放音效
-            
+            playHitSound(); 
             zombieQueue.shift();
             zombieQueue.push({ lane: Math.floor(Math.random() * 4), id: spawnedCount++ });
-            
             if (document.getElementById('game-mode').value === 'survival' && score >= 100) endGame();
         } else { 
             endGame(); 
@@ -376,7 +371,10 @@
     }
     
     window.addEventListener('keydown', e => { 
-        if (!isPlaying && e.key === 'Enter') { checkUserAndStart(); return; }
+        if (!isPlaying && e.key === 'Enter') { 
+            if(document.getElementById('login-screen').style.display !== 'none') checkUserAndStart(); 
+            return; 
+        }
         const idx = customKeys.indexOf(e.key.toLowerCase());
         if (idx !== -1) handleInput(idx);
     });
@@ -384,10 +382,8 @@
     function resize() {
         const dpr = window.devicePixelRatio || 1;
         const wrapper = document.getElementById('game-wrapper');
-        const w = wrapper.clientWidth;
-        const h = wrapper.clientHeight;
-        canvas.width = w * dpr;
-        canvas.height = h * dpr;
+        canvas.width = wrapper.clientWidth * dpr;
+        canvas.height = wrapper.clientHeight * dpr;
         ctx.scale(dpr, dpr);
     }
     window.addEventListener('resize', resize); 
