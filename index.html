@@ -23,7 +23,8 @@
         }
 
         #game-wrapper { position: relative; width: 100vw; height: 100vh; max-width: 500px; background: #000; overflow: hidden; }
-        canvas { width: 100%; height: 100%; display: block; filter: brightness(var(--bg-bright, 100%)); }
+        /* 移除 CSS filter 以提升效能 */
+        canvas { width: 100%; height: 100%; display: block; }
 
         .screen { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; text-align: center; background: rgba(0,0,0,0.95); padding: 15px; box-sizing: border-box; }
         #score-display { position: absolute; top: 30px; width: 100%; text-align: center; font-size: 60px; color: rgba(255, 255, 255, 0.2); pointer-events: none; z-index: 5; }
@@ -80,7 +81,7 @@
             </div>
         </div>
         <button class="btn" id="start-game-btn" onclick="checkUserAndStart()">開始遊戲 (Enter)</button>
-        <button style="background:none; border:1px solid #00f2ff; color:#00f2ff; margin-top:10px; padding:5px 15px; border-radius:8px; cursor:pointer;" onclick="window.openRank()">🏆生存模式排行榜</button>
+        <button style="background:none; border:1px solid #00f2ff; color:#00f2ff; margin-top:10px; padding:5px 15px; border-radius:8px; cursor:pointer;" onclick="window.openRank()">🏆 排行榜</button>
     </div>
 
     <div id="fail-screen" class="screen" style="display:none">
@@ -98,7 +99,6 @@
 </div>
 
 <audio id="bg-music" src="background.mp3" loop></audio>
-<audio id="hit-sound" src="music.mp3"></audio>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
@@ -161,10 +161,17 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d', { alpha: false });
     const bgMusic = document.getElementById('bg-music');
-    const hitSound = document.getElementById('hit-sound');
     
+    // 優化：音效池，解決連續播放中斷問題
+    const hitSoundPool = [];
+    const poolSize = 5;
+    for(let i=0; i<poolSize; i++) {
+        hitSoundPool.push(new Audio('music.mp3'));
+    }
+    let poolIdx = 0;
+
     let score = 0, isPlaying = false, isPaused = false, timeLeft = 0, gameTimer = null;
-    let currentName = "", currentPass = "", currentVol = 0.3;
+    let currentName = "", currentPass = "", currentVol = 0.3, currentBright = 100;
     let customKeys = ['a', 's', 'k', 'l'], zombieQueue = [];
 
     let visualScore = 0; 
@@ -174,15 +181,16 @@
     let imageLoaded = false; zombieImg.onload = () => imageLoaded = true;
 
     function updateBright(val) {
+        currentBright = val;
         document.getElementById('bright-val').innerText = val + '%';
-        canvas.style.setProperty('--bg-bright', val + '%');
+        // 移除效能殺手 canvas.style.setProperty，改由 renderLoop 內部處理
     }
     function updateVol(val) {
         currentVol = val / 100;
         document.getElementById('vol-val').innerText = val + '%';
+        bgMusic.volume = currentVol;
     }
 
-    // --- 修正後的驗證邏輯 ---
     async function checkUserAndStart() {
         const name = document.getElementById('user-name-input').value.trim();
         const pass = document.getElementById('user-pass-input').value.trim();
@@ -211,11 +219,9 @@
                 return;
             }
         } else if (result.status === "ok") {
-            // 這裡重新加回了登入成功彈窗
             alert(`✅ 歡迎回來 ${name}！\n您的歷史最高紀錄：${result.best || 0} 下`);
         }
         
-        // 驗證通過，正式進入遊戲
         currentName = name; 
         currentPass = pass;
         document.getElementById('login-screen').style.display = 'none';
@@ -256,10 +262,11 @@
         const rowH = logicalH * 0.12; 
         const finishLineY = logicalH * 0.78; 
 
+        // 清空背景
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, logicalW, logicalH);
 
-        // 消失線
+        // 繪製消失線
         ctx.strokeStyle = "rgba(0, 242, 255, 0.3)";
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -267,12 +274,12 @@
         ctx.lineTo(logicalW, finishLineY + rowH * 0.8);
         ctx.stroke();
 
+        // 繪製物件
         zombieQueue.forEach((zom) => {
             const size = laneW * 0.75;
             const drawY = finishLineY - (zom.id - visualScore) * rowH;
 
-            // 超過線就消失
-            if (drawY > finishLineY + rowH * 0.5) return;
+            if (drawY > finishLineY + rowH * 0.8) return;
 
             const distFromBottom = finishLineY - drawY;
             ctx.globalAlpha = Math.max(0, 1.0 - (distFromBottom / (logicalH * 0.8)));
@@ -285,6 +292,16 @@
             }
         });
 
+        // 關鍵優化：利用 Canvas 混合模式處理亮度 (取代 CSS filter)
+        if (currentBright !== 100) {
+            ctx.globalAlpha = 1.0;
+            ctx.globalCompositeOperation = "multiply";
+            const b = currentBright / 100;
+            ctx.fillStyle = `rgb(${255*b},${255*b},${255*b})`;
+            ctx.fillRect(0, 0, logicalW, logicalH);
+            ctx.globalCompositeOperation = "source-over";
+        }
+
         ctx.globalAlpha = 1.0;
         requestAnimationFrame(renderLoop);
     }
@@ -295,7 +312,13 @@
         if (lane === zombieQueue[0].lane) {
             score++;
             document.getElementById('score-display').innerText = score;
-            hitSound.currentTime = 0; hitSound.volume = currentVol; hitSound.play();
+            
+            // 使用音效池播放打擊音
+            const sound = hitSoundPool[poolIdx];
+            sound.currentTime = 0;
+            sound.volume = currentVol;
+            sound.play();
+            poolIdx = (poolIdx + 1) % poolSize;
             
             zombieQueue.shift();
             zombieQueue.push({ lane: Math.floor(Math.random() * 4), id: spawnedCount++ });
@@ -310,6 +333,7 @@
         e.preventDefault(); 
         const rect = canvas.getBoundingClientRect();
         const touch = e.touches[0];
+        // 優化座標計算
         const lane = Math.floor(((touch.clientX - rect.left) / rect.width) * 4);
         handleInput(lane);
     }, { passive: false });
@@ -335,8 +359,9 @@
 
     function resize() {
         const dpr = window.devicePixelRatio || 1;
-        canvas.width = document.getElementById('game-wrapper').clientWidth * dpr;
-        canvas.height = document.getElementById('game-wrapper').clientHeight * dpr;
+        const wrapper = document.getElementById('game-wrapper');
+        canvas.width = wrapper.clientWidth * dpr;
+        canvas.height = wrapper.clientHeight * dpr;
         ctx.scale(dpr, dpr);
     }
     window.addEventListener('resize', resize); resize();
