@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>王愛蹲音樂小遊戲 - 極速流暢版</title>
+    <title>王愛蹲音樂小遊戲 - 專業優化版</title>
     <style>
         * {
             touch-action: none; 
@@ -20,10 +20,16 @@
             color: #fff; 
             overscroll-behavior: none; 
             position: fixed; 
+            /* 強制 GPU 加速 */
+            transform: translateZ(0);
         }
 
-        #game-wrapper { position: relative; width: 100vw; height: 100vh; max-width: 500px; background: #000; overflow: hidden; }
-        canvas { width: 100%; height: 100%; display: block; image-rendering: -webkit-optimize-contrast; }
+        #game-wrapper { 
+            position: relative; width: 100vw; height: 100vh; max-width: 500px; 
+            background: #000; overflow: hidden; 
+            will-change: transform;
+        }
+        canvas { width: 100%; height: 100%; display: block; image-rendering: auto; }
 
         .screen { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; text-align: center; background: rgba(0,0,0,0.95); padding: 15px; box-sizing: border-box; }
         #score-display { position: absolute; top: 30px; width: 100%; text-align: center; font-size: 60px; color: rgba(255, 255, 255, 0.2); pointer-events: none; z-index: 5; }
@@ -161,15 +167,29 @@
     const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     const bgMusic = document.getElementById('bg-music');
     
-    // 效能優化：音效池預加載與解鎖
-    const hitSoundPool = [];
-    const poolSize = 6;
-    for(let i=0; i<poolSize; i++) {
-        const a = new Audio('music.mp3');
-        a.preload = 'auto';
-        hitSoundPool.push(a);
+    // --- Web Audio API 專業優化 (解決音效延遲) ---
+    let audioCtx;
+    let hitBuffer;
+    async function initAudio() {
+        if (audioCtx) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        try {
+            const response = await fetch('music.mp3');
+            const arrayBuffer = await response.arrayBuffer();
+            hitBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        } catch (e) { console.error("音效加載失敗"); }
     }
-    let poolIdx = 0;
+
+    function playHitSound() {
+        if (!audioCtx || !hitBuffer) return;
+        const source = audioCtx.createBufferSource();
+        const gainNode = audioCtx.createGain();
+        source.buffer = hitBuffer;
+        gainNode.gain.value = currentVol;
+        source.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        source.start(0);
+    }
 
     // 遊戲狀態
     let score = 0, isPlaying = false, isPaused = false, timeLeft = 0, gameTimer = null;
@@ -177,7 +197,6 @@
     let customKeys = ['a', 's', 'k', 'l'];
     let zombieQueue = [];
 
-    // 渲染平滑參數
     let visualScore = 0; 
     let spawnedCount = 0; 
     
@@ -197,8 +216,9 @@
     }
 
     async function checkUserAndStart() {
-        // 互動解鎖音效 (手機版關鍵)
-        hitSoundPool.forEach(s => { s.play().then(()=>s.pause()).catch(()=>{}); });
+        // 點擊開始時啟動 AudioContext
+        await initAudio();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
 
         const name = document.getElementById('user-name-input').value.trim();
         const pass = document.getElementById('user-pass-input').value.trim();
@@ -206,7 +226,6 @@
         
         const startBtn = document.getElementById('start-game-btn');
         startBtn.innerText = "驗證中..."; startBtn.disabled = true;
-        
         const result = await window.verifyUserCloud(name, pass);
         
         if (result.status === "error") {
@@ -214,21 +233,11 @@
             startBtn.innerText = "開始遊戲 (Enter)"; startBtn.disabled = false;
             return;
         } 
-        
         if (result.status === "wrong") {
             alert("❌ 密碼錯誤！");
             startBtn.innerText = "開始遊戲 (Enter)"; startBtn.disabled = false;
             return;
         } 
-        
-        if (result.status === "new") {
-            if (!confirm(`✨ 歡迎新玩家 "${name}"！\n要建立帳號嗎？`)) {
-                startBtn.innerText = "開始遊戲 (Enter)"; startBtn.disabled = false;
-                return;
-            }
-        } else if (result.status === "ok") {
-            alert(`✅ 歡迎回來 ${name}！\n您的歷史最高紀錄：${result.best || 0} 下`);
-        }
         
         currentName = name; 
         currentPass = pass;
@@ -253,20 +262,21 @@
         document.getElementById('score-display').innerText = score;
         
         zombieQueue = [];
-        for(let i=0; i<15; i++) { // 減少緩衝長度降低記憶體壓力
+        for(let i=0; i<15; i++) {
             zombieQueue.push({ lane: Math.floor(Math.random() * 4), id: spawnedCount++ });
         }
         
         isPlaying = true;
         runTimer();
-        requestAnimationFrame(renderLoop);
+        renderLoop(); // 直接調用
     }
 
+    // --- 高性能渲染循環 ---
     function renderLoop() {
         if (!isPlaying || isPaused) return;
 
-        // 平滑滾動邏輯
-        visualScore += (score - visualScore) * 0.22;
+        // 加快平滑度，減少運算
+        visualScore += (score - visualScore) * 0.25;
 
         const dpr = window.devicePixelRatio || 1;
         const logicalW = canvas.width / dpr;
@@ -275,11 +285,11 @@
         const rowH = logicalH * 0.12; 
         const finishLineY = logicalH * 0.78; 
 
-        // 優化：背景清除
+        // 1. 清除畫布
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, logicalW, logicalH);
 
-        // 繪製消失線
+        // 2. 繪製輔助線 (一次性繪製)
         ctx.strokeStyle = "rgba(0, 242, 255, 0.4)";
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -287,17 +297,17 @@
         ctx.lineTo(logicalW, finishLineY + rowH * 0.8);
         ctx.stroke();
 
-        // 繪製方塊/殭屍
+        // 3. 繪製方塊 (減少 API 調用)
         for (let i = 0; i < zombieQueue.length; i++) {
             const zom = zombieQueue[i];
             const size = laneW * 0.75;
             const drawY = finishLineY - (zom.id - visualScore) * rowH;
 
-            // 超過螢幕下方的物件不繪製
             if (drawY > logicalH) continue;
-            // 太靠上方的做透明漸變
-            const distFromBottom = finishLineY - drawY;
-            ctx.globalAlpha = Math.min(1.0, Math.max(0, 1.1 - (distFromBottom / (logicalH * 0.7))));
+            
+            const dist = finishLineY - drawY;
+            const alpha = Math.min(1.0, Math.max(0, 1.1 - (dist / (logicalH * 0.7))));
+            ctx.globalAlpha = alpha;
 
             if (imageLoaded) {
                 ctx.drawImage(zombieImg, zom.lane * laneW + (laneW - size) / 2, drawY, size, size);
@@ -307,18 +317,18 @@
             }
         }
 
-        // 亮度疊加 (採用覆蓋層方式避免重繪整個畫布)
-        if (currentBright < 100) {
-            ctx.globalCompositeOperation = "multiply";
+        // 4. 亮度濾鏡 (用 Overlay 代替濾鏡提高性能)
+        if (currentBright !== 100) {
             ctx.globalAlpha = 1.0;
-            const b = currentBright / 100;
-            ctx.fillStyle = `rgb(${255*b},${255*b},${255*b})`;
-            ctx.fillRect(0, 0, logicalW, logicalH);
-            ctx.globalCompositeOperation = "source-over";
-        } else if (currentBright > 100) {
-            ctx.globalCompositeOperation = "screen";
-            ctx.globalAlpha = (currentBright - 100) / 200;
-            ctx.fillStyle = "#fff";
+            if (currentBright < 100) {
+                ctx.globalCompositeOperation = "multiply";
+                const b = currentBright / 100;
+                ctx.fillStyle = `rgb(${255*b},${255*b},${255*b})`;
+            } else {
+                ctx.globalCompositeOperation = "screen";
+                const b = (currentBright - 100) / 200;
+                ctx.fillStyle = `rgba(255,255,255,${b})`;
+            }
             ctx.fillRect(0, 0, logicalW, logicalH);
             ctx.globalCompositeOperation = "source-over";
         }
@@ -334,12 +344,7 @@
             score++;
             document.getElementById('score-display').innerText = score;
             
-            // 音效池即時播放
-            const s = hitSoundPool[poolIdx];
-            s.volume = currentVol;
-            s.currentTime = 0;
-            s.play().catch(()=>{});
-            poolIdx = (poolIdx + 1) % poolSize;
+            playHitSound(); // 使用 Web Audio
             
             zombieQueue.shift();
             zombieQueue.push({ lane: Math.floor(Math.random() * 4), id: spawnedCount++ });
@@ -350,15 +355,12 @@
         }
     }
 
-    // 優化 Touch 事件響應速度
     canvas.addEventListener('touchstart', (e) => { 
         e.preventDefault(); 
         const rect = canvas.getBoundingClientRect();
-        for(let i=0; i<e.changedTouches.length; i++) {
-            const touch = e.changedTouches[i];
-            const lane = Math.floor(((touch.clientX - rect.left) / rect.width) * 4);
-            handleInput(lane);
-        }
+        const touch = e.changedTouches[0];
+        const lane = Math.floor(((touch.clientX - rect.left) / rect.width) * 4);
+        handleInput(lane);
     }, { passive: false });
 
     async function endGame() {
@@ -396,10 +398,8 @@
     function resize() {
         const dpr = window.devicePixelRatio || 1;
         const wrapper = document.getElementById('game-wrapper');
-        const w = wrapper.clientWidth;
-        const h = wrapper.clientHeight;
-        canvas.width = w * dpr;
-        canvas.height = h * dpr;
+        canvas.width = wrapper.clientWidth * dpr;
+        canvas.height = wrapper.clientHeight * dpr;
         ctx.scale(dpr, dpr);
     }
     window.addEventListener('resize', resize); 
